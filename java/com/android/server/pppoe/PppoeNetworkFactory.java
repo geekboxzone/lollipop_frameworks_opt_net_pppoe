@@ -63,10 +63,16 @@ class PppoeNetworkFactory {
     private static final String TAG = "PppoeNetworkFactory";
     private static final int NETWORK_SCORE = 80;
     private static final boolean DBG = true;
+    private static final boolean VDBG= false;
 
     private static void LOG(String msg) {
-        if ( DBG ) {
+        if (DBG) {
             Log.d(TAG, msg);
+        }
+    }
+    private static void LOGD(String msg) {
+        if (VDBG) {
+            Log.d(TAG,msg);
         }
     }
 
@@ -167,11 +173,11 @@ class PppoeNetworkFactory {
     }
     public void updateInterfaceState(String iface, boolean up) {
 
-        LOG("updateInterface: mIface:" + mIface + " mPhyIface:"+ mPhyIface + " iface:" + iface + " link:" + (up ? "up" : "down"));
+        LOGD("updateInterface: mIface:" + mIface + " mPhyIface:"+ mPhyIface + " iface:" + iface + " link:" + (up ? "up" : "down"));
 
         if (!mIface.equals(iface) && !mPhyIface.equals(iface)) {
 
-            LOG("not tracker interface");
+            LOGD("not tracker interface");
 
             return;
         }
