@@ -61,7 +61,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 class PppoeNetworkFactory {
     private static final String NETWORK_TYPE = "PPPOE";
     private static final String TAG = "PppoeNetworkFactory";
-    private static final int NETWORK_SCORE = 80;
+    private static final int NETWORK_SCORE = 160;
     private static final boolean DBG = true;
     private static final boolean VDBG= false;
 
