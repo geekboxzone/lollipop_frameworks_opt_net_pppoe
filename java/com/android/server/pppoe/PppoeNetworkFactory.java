@@ -51,6 +51,8 @@ import android.net.pppoe.IPppoeManager;
 import java.net.Inet4Address;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import android.provider.Settings;
+import android.text.TextUtils;
 
 /**
  *  track pppoe state
@@ -176,17 +178,20 @@ class PppoeNetworkFactory {
         LOGD("updateInterface: mIface:" + mIface + " mPhyIface:"+ mPhyIface + " iface:" + iface + " link:" + (up ? "up" : "down"));
 
         if (!mIface.equals(iface) && !mPhyIface.equals(iface)) {
-
             LOGD("not tracker interface");
-
             return;
         }
 
         if(mPhyIface.equals(iface)) { //需要监所连接物理端口
            if(!up) {
-               stopPppoe(); //当物理网口断开时,断开pppoe链接
+               machineStopPppoe(); //当物理网口断开时,断开pppoe链接
                stopTrackingInterface(iface);
-              
+           } else {
+/*add for auto connect by blb*/
+               int autoPppOn=Settings.Secure.getInt(mContext.getContentResolver(), Settings.Secure.PPPOE_ON, 0);
+               Log.d(TAG, "PPPOE_ON:"+autoPppOn);
+               if(autoPppOn == 1) autoconnect();
+/*end*/
            }
  	   return;
         }
@@ -311,7 +316,6 @@ class PppoeNetworkFactory {
             }
 
             linkProperties = new LinkProperties();
-            
             linkProperties.setInterfaceName(this.mIface);
 
             String[] dnses = new String[2];
@@ -413,6 +417,9 @@ class PppoeNetworkFactory {
             Log.e(TAG, "Could not register InterfaceObserver " + e);
         }
 
+/*add for auto connect by blb*/
+        mHandler.postDelayed(autoRunnable,8000);//
+/*end*/
     }
 
 /*============================================================================================================*/
@@ -441,13 +448,43 @@ class PppoeNetworkFactory {
         if (user==null || iface==null || password==null) return false;
         if (dns1==null) dns1="";
         if (dns2==null) dns2="";
-
+        Settings.Secure.putString(mContext.getContentResolver(),Settings.Secure.PPPOE_USERNAME,user);
+        Settings.Secure.putString(mContext.getContentResolver(),Settings.Secure.PPPOE_PSWD,password);
         if (0 == setupPppoeNative(user, iface, dns1, dns2, password)) {
             return true;
         } else {
             return false;
         }
     }
+    public boolean machineStartPppoe() {
+        LOG("startPppoe");
+        setPppoeStateAndSendBroadcast(PppoeManager.PPPOE_STATE_CONNECTING);
+        if ( 0 != startPppoeNative() ) {
+            Log.e(TAG,"machineStartPppoe() : fail to start pppoe!");
+            setPppoeStateAndSendBroadcast(PppoeManager.PPPOE_STATE_DISCONNECTED);
+            Settings.Secure.putInt(mContext.getContentResolver(),Settings.Secure.PPPOE_ON,0);
+
+            return false;
+        } else {
+            setPppoeStateAndSendBroadcast(PppoeManager.PPPOE_STATE_CONNECTED);
+            connected();
+            return true;
+        }
+    }
+
+    public boolean machineStopPppoe() {
+        setPppoeStateAndSendBroadcast(PppoeManager.PPPOE_STATE_DISCONNECTING);
+
+        if ( 0 != stopPppoeNative() ) {
+            Log.e(TAG,"stopPppoe() : fail to stop pppoe!");
+            setPppoeStateAndSendBroadcast(PppoeManager.PPPOE_STATE_DISCONNECTED);
+            return false;
+        } else {
+            setPppoeStateAndSendBroadcast(PppoeManager.PPPOE_STATE_DISCONNECTED);
+            return true;
+        }
+    }
+
     public boolean startPppoe() {
 
         LOG("startPppoe");
@@ -458,6 +495,7 @@ class PppoeNetworkFactory {
             
             return false;
         } else {
+            Settings.Secure.putInt(mContext.getContentResolver(),Settings.Secure.PPPOE_ON,1);
             setPppoeStateAndSendBroadcast(PppoeManager.PPPOE_STATE_CONNECTED);
             connected();
             return true;
@@ -471,11 +509,39 @@ class PppoeNetworkFactory {
             setPppoeStateAndSendBroadcast(PppoeManager.PPPOE_STATE_DISCONNECTED);
             return false;
         } else {
+            Settings.Secure.putInt(mContext.getContentResolver(),Settings.Secure.PPPOE_ON,0);
             setPppoeStateAndSendBroadcast(PppoeManager.PPPOE_STATE_DISCONNECTED);
             return true;
         }
     }
+/*add for auto connect by blb*/
+    Handler mHandler = new Handler();
+    Runnable autoRunnable = new Runnable() {
+        @Override
+        public void run() {
+          // TODO Auto-generated method stub^M
+          int autoPppOn=Settings.Secure.getInt(mContext.getContentResolver(), Settings.Secure.PPPOE_ON, 0);
+          if(autoPppOn == 1)  autoconnect();
+        }
+    };
 
+    public boolean autoconnect() {
+        String user;
+        String password;
+        String iface = "eth0";
+        user = Settings.Secure.getString(mContext.getContentResolver(),Settings.Secure.PPPOE_USERNAME);
+        password = Settings.Secure.getString(mContext.getContentResolver(),Settings.Secure.PPPOE_PSWD);
+
+        if(!TextUtils.isEmpty(user) && !TextUtils.isEmpty(password)) {
+            setupPppoe(user ,iface , "","" , password);
+            machineStartPppoe();
+        } else {
+            Log.e(TAG,"user empty or password empty");
+            return false;
+        }
+
+        return true;
+    }
     public native static int setupPppoeNative(String user, String iface,String dns1, String dns2, String password);
     public native static int startPppoeNative();
     public native static int stopPppoeNative();
